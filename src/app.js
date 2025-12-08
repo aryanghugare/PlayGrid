@@ -32,6 +32,7 @@ app.use(cookieParser())
 import userRouter from './routes/user.routes.js'
 import tweetRouter from './routes/tweet.routes.js'
 import subscriptionRouter from './routes/subscription.routes.js'
+import healthcheckRouter from './routes/healthcheck.routes.js'
 
 // routes declaration 
 // Through this middleware 
@@ -43,5 +44,8 @@ app.use("/api/v1/subscriptions", subscriptionRouter)
 // so we have created till here 
 // after that controll is passed to userRouter in file user.routes.js
 // http://localhost:8000/api/v1/users/ 
+
+// This is newly added routing , which is a new addition 
+app.use("/api/v1/healthcheck", healthcheckRouter);
 
 export { app };
