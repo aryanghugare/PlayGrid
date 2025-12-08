@@ -43,3 +43,23 @@ Designed as a **scalable, distributed backend project**, PlayGrid focuses on per
    ```bash
    git clone https://github.com/aryanghugare/PlayGrid.git
    cd playgrid
+   ```
+
+---
+
+## 📊 Data Modeling
+
+PlayGrid follows a **well-structured database design** to ensure optimal performance and scalability. The data model includes relationships between users, videos, subscriptions, likes, comments, and watch history.
+
+![Data Model Architecture](/src/assets/PlayGrid%20Modelling.png)
+
+**Key Relationships:**
+- **Users** can upload multiple **Videos** and have **Subscriptions**
+- **Videos** contain metadata, thumbnails, and are linked to **Likes** and **Comments**
+- **Watch History** tracks user interactions for personalized recommendations
+- **Subscriptions** enable users to follow channels and creators
+- **Tweet-like Posts** for social interaction and community engagement
+
+This normalized database structure ensures data integrity while maintaining high performance for complex queries and real-time operations.
+
+---
