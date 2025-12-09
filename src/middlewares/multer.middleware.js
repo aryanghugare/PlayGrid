@@ -11,6 +11,7 @@ const storage = multer.diskStorage({
         // You can add more security to it , 7:39:10
         // This is simple but not always secure, since two users uploading files with the same name could overwrite each other’s files.
         // That’s why many apps use Date.now() or UUIDs to generate unique names
+// Look at the docs of the multer to see how the originalname can be changed 
         cb(null, file.originalname)
     }
 })

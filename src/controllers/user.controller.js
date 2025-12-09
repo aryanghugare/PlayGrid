@@ -99,7 +99,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // because adding the cover image is not necessary for our use case for this application 
     // So for that 
 
-    let coverImageLocalPath;
+    let coverImageLocalPath; // This coverImage checking can also can be done using a simple if else loop tooo , it is done in the udemy course of this same project
     if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
         coverImageLocalPath = req.files.coverImage[0].path
     }
