@@ -33,6 +33,7 @@ import userRouter from './routes/user.routes.js'
 import tweetRouter from './routes/tweet.routes.js'
 import subscriptionRouter from './routes/subscription.routes.js'
 import healthcheckRouter from './routes/healthcheck.routes.js'
+import dashboardRouter from './routes/dashboard.routes.js'
 
 // routes declaration 
 // Through this middleware 
@@ -47,5 +48,6 @@ app.use("/api/v1/subscriptions", subscriptionRouter)
 
 // This is newly added routing , which is a new addition 
 app.use("/api/v1/healthcheck", healthcheckRouter);
+app.use("/api/v1/dashboard", dashboardRouter)
 
 export { app };
