@@ -592,15 +592,15 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         {
             $addFields: {
                 subscribersCount: {
-                    $size: "$subscribers"
+                    $size: "$subscribers" // $ is required because this field we have created in prev mongo db aggregation stages not originally present in the database 
                 },
                 channelSubscribedToCount: {
-                    $size: "$subscribedTo"
+                    $size: "$subscribedTo" // $ is required because this field we have created in prev mongo db aggregation stages not originally present in the database 
 
                 },
                 isSubscribed: {
                     $cond: {
-                        if: { $in: [req.user?._id, "$subscribers.subscriber "] }, // $in looks for the condition in both arrays and object 
+                        if: { $in: [req.user?._id, "$subscribers.subscriber"] }, // $in looks for the condition in both arrays and object 
                         then: true,
                         else: false
                     }
@@ -624,7 +624,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         }
 
     ])
-    if (channel?.length) throw new ApiError(404, "Channel not found")
+    if (!channel?.length) throw new ApiError(404, "Channel not found")
 
     console.log(channel);
 
@@ -641,7 +641,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     const user = await User.aggregate([
         {
             $match: {
-                _id: new mongoose.Types.ObjectId(req.user._id) // Here the thing we can use to get the actual mongoDb Id (3:21:00 Backend Part 2)
+                _id: new mongoose.Types.ObjectId(req.user._id) // Here the thing we can use to get the actual mongoDb Id (3:21:00 Backend Part 2) in the aggregation pipeline 
             }
 
         },
@@ -652,9 +652,36 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                 foreignField: "_id",
                 as: "watchHistory",
 
+                // This is the additional , optional 
+                pipeline : [
+                  {
+                 $lookup : {
+                from : "users",
+                localField:"owner",
+                foreignField:"_id",
+                as:"owner"
+
+                }
+                },
+                {
+                $addFields : {
+                owner : {
+                $first : "$owner"
+                }
+
+                }
+                }
+
+                ] 
+
             }
         }
     ])
+
+
+return res.status(200)
+.json(new ApiResponse(200,user[0],"Watch History is fetched successfully!!"))
+
 
 })
 
