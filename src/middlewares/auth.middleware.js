@@ -11,7 +11,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     try {
 
         // so the req has all the access to the cookies because we used app.use(cookieParser()) in app.js file 
-        const Token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+        const Token = req.header("Authorization")?.replace("Bearer ", "") || req.cookies?.accessToken;
         // For headers this can also be done const token = req.headers("authorization")?.split(" ")[1]; 
         // Through this method also we can get access Token
         // for the mobile application , the headers are send , soo there are dealed with here 
@@ -20,13 +20,13 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         // They send tokens inside the Authorization header:
 
         if (!Token) {
-            throw new ApiError(433, "You dont have acces to this data  ")
+            throw new ApiError(401, "You dont have acces to this data  ")
 
         }
-        const decodedToken = jwt.verify(Token, process.env.ACCESS_TOKEN_SECRET)
+        const decodedToken = jwt.verify(Token, process.env.ACCESS_TOKEN_SECRET, { algorithms: ["HS256"] })
 
         const user = await User.findById(decodedToken?._id).select("-password -refreshToken")  // while making the methods of refresh Token and access Token in user.model.js , we have added _id in the payload which is the unique id of the user in the database
-        if (!user) throw new ApiError(404, "Invalid Acces Token")
+        if (!user || (user.sessionVersion || 0) !== (decodedToken.version || 0)) throw new ApiError(401, "Invalid or revoked access token")
         req.user = user;
         next()
         // Give the user access to the req , which can be used in user.controller.js
@@ -36,6 +36,17 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 
     } catch (error) {
 
-        throw new ApiError(489, error?.message || "Invalid acces token ")
+        if (error instanceof ApiError) throw error;
+        if (["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(error.name)) throw new ApiError(401, "Session expired. Please sign in again");
+        throw error;
     }
 })
+
+// Public reads can include viewer-specific state without requiring a session.
+export const optionalJWT = (req, res, next) => {
+    if (!req.cookies?.accessToken && !req.header("Authorization")) return next();
+    verifyJWT(req, res, (error) => {
+        if (error?.statusCode === 401) { delete req.user; return next(); }
+        next(error);
+    });
+};
