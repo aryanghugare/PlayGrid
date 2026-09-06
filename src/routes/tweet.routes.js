@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { createTweet, getUserTweets, updateTweet, deleteTweet } from '../controllers/tweet.controller.js';
 import { verifyJWT } from "../middlewares/auth.middleware.js"
 const router = Router()
-router.use(verifyJWT) // Applying verifyJWT middleware to all routes in this file 
+// Applying verifyJWT middleware to all routes in this file
+// Public post reads now come first; mutations below still require authentication.
+router.get("/", getUserTweets);
+router.get("/user/:userId", getUserTweets);
+router.use(verifyJWT)
 
 router.route("/").post(createTweet);
 //router.route("/tweets").get(getUserTweets);
