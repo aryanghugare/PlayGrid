@@ -4,6 +4,7 @@ import { Subscription } from "../models/subscription.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponses.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
+import { objectId, pagination, pageResult, publicUserFields } from "../utils/validation.js";
 
 
 
@@ -11,6 +12,9 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     const { channelId } = req.params
     // TODO: toggle subscription
     const userID = req.user._id;
+    objectId(channelId);
+    if (String(userID) === channelId) throw new ApiError(400, "You cannot subscribe to yourself");
+    if (!await User.exists({ _id: channelId })) throw new ApiError(404, "Channel not found");
     // we are looking for already existing subscription 
     const presentSubscription = await Subscription.findOne({
         subscriber: userID,
@@ -30,7 +34,7 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 
         res.status(200)
             .json(
-                new ApiResponse(202, newSubscription, "Subsribed SuccessFully")
+                new ApiResponse(200, { isSubscribed: true, subscribersCount: await Subscription.countDocuments({ channel: channelId }) }, "Subsribed SuccessFully")
             )
     }
 
@@ -41,7 +45,7 @@ const toggleSubscription = asyncHandler(async (req, res) => {
         // Subscription.findOneAndDelete(presentSubscription)
         await Subscription.findByIdAndDelete(presentSubscription._id);
         res.status(200)
-            .json(new ApiResponse(202, "Unsubscribbed successfully"))
+            .json(new ApiResponse(200, { isSubscribed: false, subscribersCount: await Subscription.countDocuments({ channel: channelId }) }, "Unsubscribbed successfully"))
 
     }
 
@@ -53,11 +57,13 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 // controller to return subscriber list of a channel
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
     const { subscriberId } = req.params
+    objectId(subscriberId);
+    const paging = pagination(req.query);
     const allSubscribers = await Subscription.find({
         channel: subscriberId
 
-    })
-
+    }).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit)
+    const total = await Subscription.countDocuments({ channel: subscriberId });
 
 
     // 1st way to return the list of all the subscribers
@@ -65,9 +71,9 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
     // 2nd way to return the list of subscribers 
     const subList = await User.find({
         _id: allSubscribers.map(sub => sub.subscriber)
-    }).select("username email")
+    }).select(publicUserFields)
 
-    res.status(200).json(new ApiResponse(200, subList, "Subscribers fetched successfully"))
+    res.status(200).json(new ApiResponse(200, pageResult(subList, total, paging), "Subscribers fetched successfully"))
 
 })
 

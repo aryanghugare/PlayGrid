@@ -5,6 +5,10 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponses.js";
 import { deletefromCloudinary } from "../utils/deleteCloudinary.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import { text, email as validEmail, password as validPassword, safeUser, pagination, pageResult } from "../utils/validation.js";
+import { removeMedia } from "../services/media.js";
+import { videoDTO } from "../services/videos.js";
 // if you are updating some files like coverImage , avatar keep thier end points different 
 // By diiferent i mean , there routes will be different 
 //router.route("/avatar")
@@ -16,18 +20,22 @@ import jwt from "jsonwebtoken";
 // So here we will be not using asyncHandler because ...
 // We are not dealing with any route request in this method 
 
-const generateAccessAndRefereshTokens = async (userId) => {
+const generateAccessAndRefereshTokens = async (userId, expectedRefreshToken) => {
     try {
         const user = await User.findById(userId)
         const refreshToken = user.generateRefreshToken();
         const accessToken = user.generateAccessToken()
 
         user.refreshToken = refreshToken;
-        await user.save({ validateBeforeSave: false }) // to save the refresh token, but we dont have the other required(compulsory ) fields , that's why validateBeforeSave: false 
+        if (expectedRefreshToken) {
+            // Compare-and-swap prevents two refresh requests from reusing one token.
+            const rotated = await User.updateOne({ _id: userId, refreshToken: expectedRefreshToken }, { $set: { refreshToken } });
+            if (!rotated.modifiedCount) throw new ApiError(401, "Refresh token was already used");
+        } else await user.save({ validateBeforeSave: false }) // to save the refresh token, but we dont have the other required(compulsory ) fields , that's why validateBeforeSave: false
 
         return { accessToken, refreshToken }
     } catch (error) {
-        throw new ApiError(490, "Refresh T")
+        throw error instanceof ApiError ? error : new ApiError(500, "Could not create session")
     }
 
 
@@ -37,6 +45,8 @@ const generateAccessAndRefereshTokens = async (userId) => {
 
 
 const registerUser = asyncHandler(async (req, res) => {
+    const uploadedAssets = [];
+    try {
     // get the user details from frontend 
     // this is taken through postman 
     // look how to do file handling 
@@ -50,7 +60,11 @@ const registerUser = asyncHandler(async (req, res) => {
     // return res 
 
 
-    const { fullName, email, username, password } = req.body // the data coming from form and json of frontend is catch by req.body 
+    const fullName = text(req.body.fullName, "Full name", { max: 80 });
+    const email = validEmail(req.body.email);
+    const username = text(req.body.username, "Username", { min: 3, max: 30 }).toLowerCase();
+    if (!/^[a-z0-9_]+$/.test(username)) throw new ApiError(400, "Username can contain letters, numbers and underscores");
+    const password = validPassword(req.body.password); // the data coming from form and json of frontend is catch by req.body
     // console.log(req.body);
     // console.log(req.files);
 
@@ -72,7 +86,7 @@ const registerUser = asyncHandler(async (req, res) => {
     }
     // validation for email address to have "@"
     if (!email.includes("@")) {
-        throw new ApiError(408, "Enter a proper Email address  ")
+        throw new ApiError(400, "Enter a proper Email address  ")
     }
 
     // To check whether user already exits or not 
@@ -89,7 +103,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
 
     // Correct optional chaining syntax for accessing avatar path
-    const avatarLocalPath = req.files?.avatar[0]?.path;
+    const avatarLocalPath = req.files?.avatar?.[0]?.path;
     // const coverImageLocalPath = req.files?.coverImage[0]?.path
     // req.files is because of multer middleware that we have used 
     // express gives access to req.body
@@ -112,16 +126,18 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // checking whether the avatar is present or not 
     if (!avatarLocalPath) {
-        throw new ApiError(403, "Avatar file is missing ")
+        throw new ApiError(400, "Avatar file is missing ")
     }
 
     // Uploading these images on cloudinary 
     // Taking thier references in the variables 
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, req.files?.coverImage?.[0]);
+    if (coverImage?.public_id) uploadedAssets.push(coverImage.public_id)
+    const avatar = await uploadOnCloudinary(avatarLocalPath, req.files?.avatar?.[0]);
+    if (avatar?.public_id) uploadedAssets.push(avatar.public_id)
     // Checking the avatar is there or not 
     if (!avatar) {
-        throw new ApiError(412, "Avatar has been not uploaded properly on cloudinary ")
+        throw new ApiError(400, "Avatar has been not uploaded properly on cloudinary ")
     }
 
     // Create the entry on the database 
@@ -129,7 +145,9 @@ const registerUser = asyncHandler(async (req, res) => {
     // Also remember the database is always in different continent 
     const user = await User.create({
         fullName,
-        avatar: avatar.url,
+        avatar: avatar.secure_url || avatar.url,
+        avatarPublicId: avatar.public_id,
+        coverImagePublicId: coverImage?.public_id,
         coverImage: coverImage?.url || "",
         email,
         password,
@@ -151,9 +169,12 @@ const registerUser = asyncHandler(async (req, res) => {
 
     // return new ApiResponse(200, createdUser, "User has been created successfully").    this is wrong 
     return res.status(201).json(
-        new ApiResponse(200, createdUser, "User Registered Successfully"))
+        new ApiResponse(201, safeUser(createdUser), "User Registered Successfully"))
 
-
+    } catch (error) {
+        await Promise.all(uploadedAssets.map(id => removeMedia(id)));
+        throw error;
+    }
 })
 
 /*  My login method 
@@ -203,7 +224,10 @@ const loginUser = asyncHandler(async (req, res) => {
     // access and refresh token 
     // send cookie 
 
-    const { email, username, password } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : undefined;
+    const username = typeof req.body.username === "string" ? req.body.username.trim().toLowerCase() : undefined;
+    const { password } = req.body;
+    if (typeof password !== "string" || !password) throw new ApiError(400, "Password is required");
 
     if (!username && !email) {
         throw new ApiError(400, "username or email is required ")
@@ -214,13 +238,14 @@ const loginUser = asyncHandler(async (req, res) => {
     })
 
     if (!user) {
-        throw new ApiError(404, "User not found")
+        throw new ApiError(401, "Email, username or password is incorrect")
     }
 
     const passwordCorrect = await user.isPasswordCorrect(password)
     if (!passwordCorrect) {
-        throw new ApiError(444, "Password is not correct ")
+        throw new ApiError(401, "Email, username or password is incorrect")
     }
+    await User.updateOne({ _id: user._id }, { $inc: { sessionVersion: 1 } });
     const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id)
     // console.log("This is access token", accessToken);
     // console.log("This is refresh token", refreshToken);
@@ -241,15 +266,17 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.COOKIE_SAME_SITE || "lax",
+        path: "/"
     } // through this options we are ensuring that the cookies can be modified from backend only(server only )
 
     return res
         .status(200)
         .cookie("accessToken", accessToken, options)
         .cookie("refreshToken", refreshToken, options)
-        .json(new ApiResponse(202, {
-            user: loggedInUser, accessToken, refreshToken,
+        .json(new ApiResponse(200, {
+            user: safeUser(loggedInUser),
         },
             "User LoggedIn Successfully"
         )
@@ -264,7 +291,8 @@ const logOutUser = asyncHandler(async (req, res) => {
     // Refresh token (in httpOnly cookie) → this is what keeps the user logged in.
     // 👉 Logout = clear the refresh token so the client can’t request new access tokens.
     // Optionally, also clear refresh token from DB (if you store it)
-    await User.findByIdAndUpdate(req.user._id,
+    const logoutUser = req.user || (req.cookies?.refreshToken ? await User.findOne({ refreshToken: req.cookies.refreshToken }) : null);
+    await User.findByIdAndUpdate(logoutUser?._id || null,
         {
             // to clear the refresh token 
             // 1st way 
@@ -274,6 +302,7 @@ const logOutUser = asyncHandler(async (req, res) => {
             // }
 
             // 2nd way 
+            $inc: { sessionVersion: 1 },
             $unset: {
                 refreshToken: 1 // this removes the field from document
             }
@@ -286,7 +315,9 @@ const logOutUser = asyncHandler(async (req, res) => {
     // Through this we can update the refresh  token 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.COOKIE_SAME_SITE || "lax",
+        path: "/"
     }
 
 
@@ -294,7 +325,7 @@ const logOutUser = asyncHandler(async (req, res) => {
         .status(200)
         .clearCookie("accessToken", options)
         .clearCookie("refreshToken", options)
-        .json(new ApiResponse(202, {}, "Logout successful"))
+        .json(new ApiResponse(200, {}, "Logout successful"))
 })
 
 // The thing is access Token is for short period 
@@ -308,27 +339,29 @@ const logOutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
     // Get refresh token from cookies (browser) OR body (mobile/API)
-    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!incomingRefreshToken) {
         throw new ApiError(401, "UnAuthorized request - No refresh token");
     }
     try {
 
-        const decoded = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+        const decoded = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET, { algorithms: ["HS256"] });
         const user = await User.findById(decoded?._id);
-        if (!user) throw new ApiError(421, "You are not allowed for refresh token ")
-        if (user.refreshToken !== incomingRefreshToken) {
-            new ApiError(456, "Refresh Token is expired or used ")
+        if (!user) throw new ApiError(400, "You are not allowed for refresh token ")
+        if (user.refreshToken !== incomingRefreshToken || (user.sessionVersion || 0) !== (decoded.version || 0)) {
+            throw new ApiError(401, "Refresh Token is expired or used ")
         }
 
         const options = {
             httpOnly: true,
-            secure: true
+            secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.COOKIE_SAME_SITE || "lax",
+        path: "/"
         }
 
 
         // Generate new access token 
-        const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id)
+        const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id, incomingRefreshToken)
             return res
             .status(200)
             .cookie("accessToken", accessToken, options)
@@ -336,7 +369,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             .json(new ApiResponse(200,
 
                 {
-                    accessToken, refreshToken
+                    sessionRefreshed: true
                 },
                 "Access Token refresh successfully "
 
@@ -344,7 +377,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             ))
 
     } catch (error) {
-        throw new ApiError(404, "Something went wrong in refreshing access token ")
+        throw new ApiError(401, "Session expired. Please sign in again")
     }
 
 })
@@ -352,14 +385,15 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     try {
         const { newPassword, oldPassword } = req.body;
+        if (typeof oldPassword !== "string") throw new ApiError(400, "Current password is required");
         // We can also add something like confirm password (optional)
         if (!oldPassword || !newPassword) {
-            throw new ApiError(420, "Both old and new password are required");
+            throw new ApiError(400, "Both old and new password are required");
         }
         // const same = await bcrypt.compare(newPassword, oldPassword)
         // if (same) return new ApiError(415, "New and old Password cannot be same ")
         if (newPassword === oldPassword) {
-        throw new ApiError(415, "New and old Password cannot be same")
+        throw new ApiError(400, "New and old Password cannot be same")
         }
         // So here the thing , we will use the middleware of auth.middleware.js , in the user.routes
         // soo after this req will have req.user 
@@ -369,8 +403,13 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
             throw new ApiError(400, "Invalid old Password ")
         }
 
+        validPassword(newPassword);
+        user.refreshToken = undefined;
+        user.sessionVersion = (user.sessionVersion || 0) + 1;
         user.password = newPassword
-        await user.save({ validateBeforeSave: false })
+        await user.save({ validateBeforeSave: false });
+        const options = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.COOKIE_SAME_SITE || "lax", path: "/" };
+        res.clearCookie("accessToken", options).clearCookie("refreshToken", options);
         // what is happenning here is , we have a pre hook for User schema, where there is save operation it checks 
         // whether the password is entered first time or whether the password is changed , in this cases 
         // User schema encrypts the new password which is plain text using bcrypt and stores it 
@@ -379,7 +418,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 
 
     } catch (error) {
-        throw new ApiError(412, "There was some error while changing the password ")
+        throw error instanceof ApiError ? error : new ApiError(500, "Could not change password")
     }
 
 
@@ -388,10 +427,10 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 
 const getcurrentUser = asyncHandler(async (req, res) => {
 
-    const current = req.user
+    const current = safeUser(req.user)
 
     return res.status(200)
-        .json(new ApiResponse(202, current, "You have the current user context "))
+        .json(new ApiResponse(200, current, "You have the current user context "))
 
 })
 
@@ -402,7 +441,8 @@ const getcurrentUser = asyncHandler(async (req, res) => {
 
 // Actually after testing , it is not throwing error 
 const updateAccountDetails1 = asyncHandler(async (req, res) => {
-    const { fullname, email } = req.body
+    const fullname = text(req.body.fullName ?? req.body.fullname, "Full name", { max: 80 });
+    const email = validEmail(req.body.email)
     if (!fullname || !email) {
         throw new ApiError(400, "All fields are required")
     }
@@ -411,11 +451,11 @@ const updateAccountDetails1 = asyncHandler(async (req, res) => {
             fullName: fullname,  // fullName is the field in the database 
             email: email
         },
-        { new: true }
+        { new: true, runValidators: true }
 
     ).select("-password") // This is used to dont include the password in this response 
     return res.status(200)
-        .json(new ApiResponse(202, user, "Account Details updated Successfully  "))
+        .json(new ApiResponse(200, safeUser(user), "Account Details updated Successfully  "))
 
 });
 
@@ -442,15 +482,15 @@ const updateAccountDetails2 = asyncHandler(async (req, res) => {
 
 
 const updateUserAvatar = asyncHandler(async (req, res) => {
-    const avatarpath = req.file.path;
+    const avatarpath = req.file?.path;
     const prevAvatar = req.user.avatar; // this is variable of previous avatar in the databsse 
 
     if (!avatarpath) {
-        new ApiError(402, "Avatar not present in the local storage or not given properly  ")
+        throw new ApiError(400, "Avatar file is required")
     }
-    const avatarcloud = await uploadOnCloudinary(avatarpath);
-    if (!avatarcloud.url) {
-        throw new ApiError(402, "Error while uploading file on cloudinary ")
+    const avatarcloud = await uploadOnCloudinary(avatarpath, req.file);
+    if (!avatarcloud?.url) {
+        throw new ApiError(400, "Error while uploading file on cloudinary ")
     }
 
 
@@ -464,19 +504,17 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         const fileWithExt = parts.pop(); // e.g. "stlewelcy9ampkfq5tpy.jpg"
 
         // Check if previous part is a version ("v12345")
-        if (parts[parts.length - 1].startsWith("v")) {
+        if (parts[parts.length - 1]?.startsWith("v")) {
             parts.pop(); // remove version
         }
 
         const publicId = fileWithExt.split(".")[0]; // remove extension
-        return parts.slice(parts.indexOf("upload") + 1).join("/") + publicId;
+        return [...parts.slice(parts.indexOf("upload") + 1), publicId].filter(Boolean).join("/");
     }
 
-    const publicId = getPublicIdFromUrl(prevAvatar)
+    const publicId = req.user.avatarPublicId || getPublicIdFromUrl(prevAvatar)
 
-    const done = await deletefromCloudinary(publicId);
-
-    if (!done) throw new ApiError(405, "Image Deletion is not done ")
+    // Delete the old asset only after the database update succeeds.
 
 
     // Here , I am updating the databse with the new url 
@@ -484,7 +522,8 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     try {
         const user = await User.findByIdAndUpdate(req.user._id, {
 
-            avatar: avatarcloud.url
+            avatar: avatarcloud.secure_url || avatarcloud.url,
+            avatarPublicId: avatarcloud.public_id
         },
             {
                 new: true,
@@ -492,13 +531,15 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         )
             .select("-password")
 
+        await removeMedia(publicId);
         return res
             .status(200)
-            .json(new ApiResponse(202, user, "The Avatar is updated successfully "))
+            .json(new ApiResponse(200, safeUser(user), "The Avatar is updated successfully "))
 
     }
     catch (error) {
-        throw new ApiError(454, "Error While updating the avatar")
+        await removeMedia(avatarcloud.public_id);
+        throw new ApiError(500, "Error While updating the avatar")
 
     }
 
@@ -515,9 +556,9 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Cover image file is missing")
     }
 
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, req.file)
 
-    if (!coverImage.url) {
+    if (!coverImage?.url) {
         throw new ApiError(400, "Error while uploading on avatar")
 
     }
@@ -529,40 +570,43 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         const fileWithExt = parts.pop(); // e.g. "stlewelcy9ampkfq5tpy.jpg"
 
         // Check if previous part is a version ("v12345")
-        if (parts[parts.length - 1].startsWith("v")) {
+        if (parts[parts.length - 1]?.startsWith("v")) {
             parts.pop(); // remove version
         }
 
         const publicId = fileWithExt.split(".")[0]; // remove extension
-        return parts.slice(parts.indexOf("upload") + 1).join("/") + publicId;
+        return [...parts.slice(parts.indexOf("upload") + 1), publicId].filter(Boolean).join("/");
     }
 
-    const publicId = getPublicIdFromUrl(prevcoverImage)
-    const done = await deletefromCloudinary(publicId);
+    const publicId = req.user.coverImagePublicId || (prevcoverImage ? getPublicIdFromUrl(prevcoverImage) : null)
+    // Delete the old asset only after the database update succeeds.
 
-    if (!done) throw new ApiError(405, "Image Deletion is not done ")
-
-    const user = await User.findByIdAndUpdate(
+    let user;
+    try {
+    user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
-                coverImage: coverImage.url
+                coverImage: coverImage.secure_url || coverImage.url,
+                coverImagePublicId: coverImage.public_id
             }
         },
         { new: true }
     ).select("-password")
 
+    } catch (error) { await removeMedia(coverImage.public_id); throw error; }
+    await removeMedia(publicId);
     return res
         .status(200)
         .json(
-            new ApiResponse(200, user, "Cover image updated successfully")
+            new ApiResponse(200, safeUser(user), "Cover image updated successfully")
         )
 })
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
     const { username } = req.params
     if (!username?.trim()) {
-        throw new ApiError(402, "username is missing")
+        throw new ApiError(400, "username is missing")
     }
 
     // After agggregation pipelines , the response data is of arrays 
@@ -617,7 +661,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 channelSubscribedToCount: 1,
                 isSubscribed: 1,
                 avatar: 1,
-                email: 1,
+                // Email is private account data, not part of a public channel response.
                 coverImage: 1,
 
             }
@@ -626,12 +670,12 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     ])
     if (!channel?.length) throw new ApiError(404, "Channel not found")
 
-    console.log(channel);
+    // Channel details are returned below instead of logging profile data.
 
 
     return res.status(200)
         .json(
-            new ApiResponse(202, channel[0], "User channel profile fetched successfully ")
+            new ApiResponse(200, channel[0], "User channel profile fetched successfully ")
         )
 
 })
@@ -654,12 +698,14 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
                 // This is the additional , optional 
                 pipeline : [
+                  { $match: { $or: [{ isPublished: true }, { owner: req.user._id }] } },
                   {
                  $lookup : {
                 from : "users",
                 localField:"owner",
                 foreignField:"_id",
-                as:"owner"
+                as:"owner",
+                pipeline: [{ $project: { username: 1, fullName: 1, avatar: 1 } }]
 
                 }
                 },
@@ -675,12 +721,17 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                 ] 
 
             }
-        }
+        },
+        { $project: { watchHistory: 1 } }
     ])
 
 
+const paging = pagination(req.query);
+const ids = new Map((req.user.watchHistory || []).map((id, index) => [String(id), index]));
+const history = user[0]?.watchHistory || [];
+history.sort((a, b) => ids.get(String(a._id)) - ids.get(String(b._id)));
 return res.status(200)
-.json(new ApiResponse(200,user[0],"Watch History is fetched successfully!!"))
+.json(new ApiResponse(200, pageResult(history.slice(paging.skip, paging.skip + paging.limit).map(videoDTO), history.length, paging),"Watch History is fetched successfully!!"))
 
 
 })
