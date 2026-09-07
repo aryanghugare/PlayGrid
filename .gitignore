@@ -120,3 +120,12 @@ dist
 
 
 node_modules
+# Local media and test database
+data/
+frontend/dist/
+!.env.example
+
+# Browser test artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.tsbuildinfo

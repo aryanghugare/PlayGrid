@@ -12,7 +12,11 @@
 
     "scripts": {
 
-        "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js"
+        "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js",
+        "start": "node -r dotenv/config src/index.js",
+        "test": "node --test --test-concurrency=1 tests/*.test.js",
+        "migrate": "node scripts/migrate.js",
+        "dev:local": "node scripts/dev-local.js"
 
     },
 
@@ -24,7 +28,9 @@
 
         "nodemon": "^3.1.10",
 
-        "prettier": "^3.6.2"
+        "prettier": "^3.6.2",
+        "supertest": "^7.2.2",
+        "mongodb-memory-server": "^11.2.0"
 
     },
 

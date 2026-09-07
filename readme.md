@@ -63,3 +63,11 @@ PlayGrid follows a **well-structured database design** to ensure optimal perform
 This normalized database structure ensures data integrity while maintaining high performance for complex queries and real-time operations.
 
 ---
+
+## Implementation and local development
+
+The backend has been extended and a React frontend is available in `frontend/`. The original backend learning comments are retained. See [backend additions and API contracts](docs/BACKEND_IMPLEMENTATION.md) and [frontend setup](frontend/README.md).
+
+Quick local start after installing dependencies: `npm run build --prefix frontend`, then `npm run dev:local`. Open `http://localhost:8000`, create an account, and upload your first video. This optional mode keeps a development database and media in `data/` and does not use your existing `.env` credentials. Use the original `npm run dev` command for your configured backend.
+
+Checks: `npm test` and `npm run test:e2e --prefix frontend`.

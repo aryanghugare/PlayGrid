@@ -2,6 +2,7 @@
 // but we are storing it in utils folder 
 import { v2 as cloudinary } from 'cloudinary';
 import fs from "fs" // file system 
+import { storeMedia } from "../services/media.js";
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -10,9 +11,15 @@ cloudinary.config({
 });
 
 // Method to upload files on cloudinary 
-const uploadOnCloudinary = async (localFilePath) => {
+const uploadOnCloudinary = async (localFilePath, file) => {
     try {
         if (!localFilePath) return null
+        // The optional file parameter adds validated local development storage.
+        if (file) {
+            const asset = await storeMedia(file, "image");
+            if (fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
+            return { url: asset.url, secure_url: asset.url, public_id: asset.publicId };
+        }
         // upload the file on cloudinary 
         const response = await cloudinary.uploader.upload(localFilePath, {
             // All the cloudinary options 
@@ -26,9 +33,9 @@ const uploadOnCloudinary = async (localFilePath) => {
         return response;
     } catch (error) {
         // If there is any error , we should delete this file from local server 
-        fs.unlinkSync(localFilePath) // remove the locally saved temprorary file as 
+        if (localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath) // remove the locally saved temprorary file as
         // the upload operation got failed 
-        return null;
+        throw error;
     }
 }
 
