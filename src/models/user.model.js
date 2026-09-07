@@ -1,6 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
+import { randomUUID } from "node:crypto";
 const userSchema = new Schema(
 
     {
@@ -37,6 +38,11 @@ const userSchema = new Schema(
             type: String, // cloudinary url 
         },
 
+        // Asset IDs are stored separately so replacement does not guess IDs from URLs.
+        avatarPublicId: String,
+        coverImagePublicId: String,
+        sessionVersion: { type: Number, default: 0 },
+
         watchHistory: [{
             type: Schema.Types.ObjectId,
             ref: "Video"
@@ -70,7 +76,7 @@ userSchema.pre('save', async function (next) {
     if (this.isModified("password")) { // This if loop is because , when there will be changes in password or password is enter the first time  , then only the following hook of encrypting password is used 
 
         this.password = await bcrypt.hash(this.password, 10) // 10 here is number of rounds 
-        next()
+        // The shared next() below also handles saves with an unchanged password.
         /*
                 The next() function is a callback provided by Mongoose.
                 It’s how you tell Mongoose:
@@ -78,6 +84,7 @@ userSchema.pre('save', async function (next) {
         */
     }
 
+    next();
 })
 // These are the custom methods which i have created 
 // This is the method to validate the password 
@@ -89,6 +96,7 @@ userSchema.methods.isPasswordCorrect = async function (password) {
 userSchema.methods.generateAccessToken = function () {
     return jwt.sign({
         _id: this._id,
+        version: this.sessionVersion || 0,
         email: this.email,
         username: this.username,
         fullName: this.fullName,
@@ -97,7 +105,8 @@ userSchema.methods.generateAccessToken = function () {
 
 
         {
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m",
+            jwtid: randomUUID(), algorithm: "HS256"
         }
     )
 }
@@ -105,12 +114,14 @@ userSchema.methods.generateAccessToken = function () {
 userSchema.methods.generateRefreshToken = function () {
     return jwt.sign({
         _id: this._id,
+        version: this.sessionVersion || 0,
     },
         process.env.REFRESH_TOKEN_SECRET,
 
 
         {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d",
+            jwtid: randomUUID(), algorithm: "HS256"
         }
     )
 

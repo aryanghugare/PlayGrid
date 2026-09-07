@@ -19,9 +19,12 @@ const videoSchema = new Schema(
             required: true,
 
         },
+        // Keep the legacy spelling readable while new writes use description.
+        description: { type: String, default: "", maxlength: 5000 },
+        videoPublicId: String,
+        thumbnailPublicId: String,
         decription: {
             type: String,
-            required: true,
 
         },
 
@@ -36,7 +39,7 @@ const videoSchema = new Schema(
 
         isPublished: {
             type: Boolean,
-            default: true,
+            default: false,
         },
 
         owner: {
@@ -52,5 +55,7 @@ const videoSchema = new Schema(
 )
 
 videoSchema.plugin(mongooseAggregatePaginate)
+videoSchema.index({ owner: 1, createdAt: -1 });
+videoSchema.index({ isPublished: 1, createdAt: -1, _id: -1 });
 
 export const Video = mongoose.model("Video", videoSchema)
