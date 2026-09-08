@@ -177,7 +177,7 @@ export function PlaylistPage() {
             title="Your collection is taking shape"
             detail="Use Save on any video to add it to this playlist."
             action={
-              <Link className="button" to="/">
+              <Link className="button" to="/explore">
                 Discover videos
                 <ArrowUpRight size={16} />
               </Link>

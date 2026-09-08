@@ -8,7 +8,7 @@ test("creator and viewer journey: signup, upload, play, save, discuss, edit and 
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/explore");
   await expect(
     page.getByRole("heading", {
       name: "A little curiosity. A lot to discover.",
@@ -203,7 +203,7 @@ test("mobile discovery navigation, search and direct links work without overflow
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/explore");
   await expect(
     page.getByRole("heading", {
       name: "A little curiosity. A lot to discover.",

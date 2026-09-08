@@ -1,6 +1,6 @@
 # PlayGrid frontend
 
-React + TypeScript + Vite, with React Router and TanStack Query. All displayed content comes from the backend. There are no seed accounts or placeholder videos in the application.
+React + TypeScript + Vite + Tailwind CSS, with React Router and TanStack Query. All video feeds and user content come from the backend. The public homepage uses original AI-generated promotional artwork stored locally in `public/images/home/`; it does not represent uploaded videos or real members. There are no seed accounts or placeholder videos in the application.
 
 ## Development
 
@@ -26,6 +26,8 @@ Browser tests create their own account and generate a short playable WebM in the
 
 ## Screens
 
+Public homepage at `/` with feature descriptions, keyboard-accessible use-case tabs, and Explore links to the existing discovery page at `/explore`.
+
 Discover/search; login/register; channels and subscribers; community; watch with comments, likes and save-to-playlist; subscription feed; history; liked videos; private playlists with edit/delete, membership removal and ordering; creator dashboard/upload/edit/publication/delete; profile/images/password settings.
 
 Session cookies are HttpOnly. The API client shares refresh requests and never puts refresh tokens in localStorage. Inputs and pages include loading/error/empty states. The responsive layout uses keyboard-accessible links, buttons and native dialogs. Fonts are loaded from Google Fonts with system fallbacks.
@@ -33,3 +35,9 @@ Session cookies are HttpOnly. The API client shares refresh requests and never p
 ## Scope
 
 This is an MVP for the implemented REST APIs. It does not add password reset, email verification, OAuth, transcoding, recommendation ranking, notifications, or streaming analytics. See `../docs/BACKEND_IMPLEMENTATION.md` for media privacy and deployment boundaries.
+
+## Styling
+
+Use Tailwind utilities for new UI. Tailwind is compiled through `@tailwindcss/vite`; `src/tailwind.css` imports the theme and utilities without Preflight to preserve the existing app reset. The homepage uses utilities directly in `Home.tsx`, including responsive and interaction variants. Its `home-*` classes are section markers, not a separate stylesheet. Existing screens retain their styles in `src/styles.css`.
+
+Vite integration follows the [official Tailwind guide](https://tailwindcss.com/docs/installation/using-vite); the reset is omitted as described in [Preflight documentation](https://tailwindcss.com/docs/preflight).

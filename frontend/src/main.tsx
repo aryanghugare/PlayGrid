@@ -1,10 +1,17 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Link,
+  useLocation,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./auth";
 import { Layout } from "./components/Layout";
 import { RequireAuth, Empty } from "./components/shared";
+import { Home } from "./pages/Home";
 import { Browse } from "./pages/Browse";
 import { AuthPage } from "./pages/Auth";
 import { Community } from "./pages/Community";
@@ -14,6 +21,16 @@ import { Studio, VideoEditor } from "./pages/Studio";
 import { Settings } from "./pages/Settings";
 import { Playlists, PlaylistPage } from "./pages/Playlists";
 import "./styles.css";
+import "./tailwind.css";
+// Start a new page at the top while preserving in-page homepage anchor navigation.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 const cache = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
@@ -26,10 +43,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={cache}>
       <BrowserRouter>
+        <ScrollToTop />
         <AuthProvider>
           <Routes>
+            <Route path="/" element={<Home />} />
             <Route element={<Layout />}>
-              <Route index element={<Browse key="discover" />} />
+              <Route path="explore" element={<Browse key="discover" />} />
               <Route
                 path="search"
                 element={<Browse key="search" mode="search" />}
@@ -78,7 +97,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                     title="This page wandered off"
                     detail="Let’s get you back to something good."
                     action={
-                      <Link className="button" to="/">
+                      <Link className="button" to="/explore">
                         Back to discovery
                       </Link>
                     }

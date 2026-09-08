@@ -26,7 +26,7 @@ import {
 import { useAuth } from "../auth";
 import { Avatar, ErrorBox } from "./shared";
 const links = [
-  ["/", "Discover", Compass],
+  ["/explore", "Discover", Compass],
   ["/subscriptions", "Subscriptions", Users],
   ["/community", "Community", MessageSquare],
   ["/history", "Watch history", History],
@@ -71,7 +71,7 @@ export function Layout() {
         <nav>
           {links.map(([to, label, Icon], i) => (
             <NavLink
-              end={to === "/" || to === "/studio"}
+              end={to === "/explore" || to === "/studio"}
               key={to}
               to={to}
               onClick={() => setOpen(false)}
@@ -81,7 +81,7 @@ export function Layout() {
             >
               <Icon size={19} />
               {label}
-              {to === "/" && <span className="nav-active-dot" />}
+              {to === "/explore" && <span className="nav-active-dot" />}
             </NavLink>
           ))}
         </nav>
@@ -119,7 +119,7 @@ export function Layout() {
               const q = String(
                 new FormData(e.currentTarget).get("q") || ""
               ).trim();
-              navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/");
+              navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/explore");
             }}
           >
             <Search size={18} />

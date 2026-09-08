@@ -1,0 +1,5 @@
+/* Keep the existing app reset while making Tailwind available to every page. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+
+/* Utilities are unlayered so they can override the existing unlayered base styles. */

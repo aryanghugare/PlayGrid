@@ -36,7 +36,7 @@ export function AuthPage({ register = false }: { register?: boolean }) {
             destination.startsWith("/") &&
             !destination.startsWith("//")
             ? destination
-            : "/",
+            : "/explore",
           { replace: true }
         );
       }

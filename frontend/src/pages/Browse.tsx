@@ -176,7 +176,7 @@ export function Browse({
                             : "Videos you watch while signed in will appear here."
                     }
                     action={
-                      <Link className="button secondary" to="/">
+                      <Link className="button secondary" to="/explore">
                         Explore videos
                         <ArrowUpRight size={16} />
                       </Link>

@@ -277,7 +277,8 @@ These are implemented accessibility provisions, not a certification of accessibi
 
 | Route | Page |
 |---|---|
-| `/` | Discover videos. |
+| `/` | Public homepage with feature overview, interactive viewer/creator/community use cases, and Explore entry point. |
+| `/explore` | Discover videos. |
 | `/search?q=...` | Search results. |
 | `/register` | Registration. |
 | `/login` | Login. |
