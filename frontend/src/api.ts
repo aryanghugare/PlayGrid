@@ -1,4 +1,12 @@
-const base = "/api/v1";
+// Localhost stays on /api (Vite proxy, or the backend serving the built app).
+// A hosted frontend uses VITE_API_URL from .env.production.
+const configured = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+const hostedApi =
+  /^https?:\/\//.test(configured) &&
+  typeof window !== "undefined" &&
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1";
+const base = `${hostedApi ? configured : ""}/api/v1`;
 export class ApiError extends Error {
   constructor(
     message: string,
