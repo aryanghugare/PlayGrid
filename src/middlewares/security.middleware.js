@@ -5,11 +5,36 @@ export function allowedOrigins() {
     .map((x) => x.trim())
     .filter(Boolean);
 }
+export function originAllowed(origin) {
+  if (!origin) return true;
+  const allowed = allowedOrigins();
+  if (allowed.includes("*") || allowed.includes(origin) || origin === process.env.APP_ORIGIN)
+    return true;
+  let requestUrl;
+  try {
+    requestUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+  const loopback = new Set(["localhost", "127.0.0.1"]);
+  return allowed.some((entry) => {
+    try {
+      const allowedUrl = new URL(entry);
+      return (
+        requestUrl.protocol === allowedUrl.protocol &&
+        requestUrl.port === allowedUrl.port &&
+        loopback.has(requestUrl.hostname) &&
+        loopback.has(allowedUrl.hostname)
+      );
+    } catch {
+      return false;
+    }
+  });
+}
 export function browserWriteGuard(req, res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   const origin = req.get("Origin");
-  const sameOrigin = process.env.APP_ORIGIN;
-  if (origin && !allowedOrigins().includes(origin) && origin !== sameOrigin)
+  if (origin && !originAllowed(origin))
     return next(new ApiError(403, "Request origin is not allowed"));
   if (!origin && req.get("Sec-Fetch-Site") === "cross-site")
     return next(new ApiError(403, "Cross-site request denied"));

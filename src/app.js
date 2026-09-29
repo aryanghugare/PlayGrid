@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { allowedOrigins, browserWriteGuard, rateLimit } from "./middlewares/security.middleware.js";
+import { originAllowed, browserWriteGuard, rateLimit } from "./middlewares/security.middleware.js";
 import { cleanupUploads } from "./middlewares/multer.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { ApiError } from "./utils/ApiError.js";
@@ -21,7 +21,7 @@ app.use((req, res, next) => { res.set("X-Content-Type-Options", "nosniff"); next
 // app.use() is the middleware 
 // To handle the cross origin resource sharing 
 app.use(cors({
-    origin(origin, cb) { cb(null, !origin || allowedOrigins().includes(origin) || origin === process.env.APP_ORIGIN); },
+    origin(origin, cb) { cb(null, originAllowed(origin)); },
     credentials: true
     // many options to explore 
 }))
